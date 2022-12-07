@@ -1,51 +1,16 @@
-FROM alpine:3.16 as pkg-builder
+FROM python:slim-bullseye
 
-RUN apk -U add \
-    sudo \
-    alpine-sdk \
-    apkbuild-pypi
+# install all the dependencies except libcairo2 from jessie
+RUN apt-get -y update \
+    && apt-get install -y \
+    python3-pip python3-cffi python3-brotli libpango-1.0-0 libpangoft2-1.0-0 \
+    && apt-get -y clean
 
-RUN mkdir -p /var/cache/distfiles && \
-    adduser -D packager && \
-    addgroup packager abuild && \
-    chgrp abuild /var/cache/distfiles && \
-    chmod g+w /var/cache/distfiles && \
-    echo "packager ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+WORKDIR /usr/src/app
 
-WORKDIR /work
-USER packager
+COPY requirements.txt ./
 
-RUN abuild-keygen -a -i -n
-
-COPY --chown=packager:packager packages/ ./
-
-RUN cd py3-pydyf && \
-    abuild -r && \
-    cd ../py3-zopfli && \
-    abuild -r && \
-    cd ../py3-weasyprint && \
-    abuild -r
-
-
-FROM alpine:3.16
-
-RUN addgroup --system weasyprint \
-     && adduser --system --ingroup weasyprint weasyprint
-
-COPY --from=pkg-builder /home/packager/packages/work/ /packages/
-COPY --from=pkg-builder /home/packager/.abuild/*.pub /etc/apk/keys/
-
-RUN apk add --no-cache --repository /packages \
-    font-liberation \
-    font-liberation-sans-narrow \
-    ttf-linux-libertine \
-    python3 \
-    py3-aiohttp \
-    py3-weasyprint
-
-ENV PYTHONUNBUFFERED 1
-WORKDIR /app
-USER weasyprint
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8080
 
